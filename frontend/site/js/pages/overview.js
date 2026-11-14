@@ -1,6 +1,35 @@
 import { api } from '../api.js';
-import { ENUMS } from '../config.js';
+import { ENUMS, reviewTone, versionTone } from '../config.js';
 import { barList, emptyState, errorBox, errorMessage, esc, fmtTime, fmtTimeShort, pct, trendChart, watermarkTrack } from '../ui.js';
+
+function governanceCard(gov) {
+  if (!gov) return '';
+  const current = gov.current;
+  const pending = gov.pending;
+  return `<section class="panel ov-row" data-testid="overview-governance">
+    <div class="panel-head"><h2>订阅版本治理</h2><span class="meta">当前版本 / 待生效变更</span></div>
+    <div class="panel-body gov-grid">
+      <div class="gov-card">
+        <div class="eyebrow">当前基线（批次钉住这一版）</div>
+        <div class="gov-main">
+          ${current ? `<span class="badge ${versionTone(current.status)}">${esc(current.version_label)} · ${esc(current.status_label)}</span><span class="tiny muted">启用 ${esc(fmtTimeShort(current.activated_at))}</span>` : '<span class="muted">尚无基线</span>'}
+        </div>
+      </div>
+      <div class="gov-card ${pending ? 'alert-border' : ''}">
+        <div class="eyebrow">待生效版本</div>
+        <div class="gov-main">
+          ${
+            pending
+              ? `<span class="badge ${versionTone(pending.status)}">${esc(pending.version_label)}</span>
+                 <span class="badge ${reviewTone(pending.review_status)}">${esc(pending.review_status_label)}</span>
+                 <span class="tiny muted">基于 ${esc(pending.base_version_label || '—')} · 影响 ${esc(pending.affected_count)} 表${pending.baseline_stale ? ' · 基线漂移待重算' : ''}</span>`
+              : '<span class="muted">没有待生效变更</span>'
+          }
+        </div>
+      </div>
+    </div>
+  </section>`;
+}
 
 function tableCards(tables) {
   if (!tables.length) return emptyState({ title: '还没有源表', hint: '管理员在「源表与订阅」登记第一张表后，事件才能进来。' });
@@ -64,6 +93,8 @@ export const overviewPage = {
           </div>
         </section>
 
+        ${governanceCard(data.subscription_governance)}
+
         <section class="panel ov-row">
           <div class="panel-head"><h2>表级订阅与水位</h2><span class="meta">${esc(data.tables.length)} tables · MySQL binlog</span></div>
           <div class="panel-body">${tableCards(data.tables)}</div>
@@ -106,6 +137,7 @@ export const overviewPage = {
                       .map(
                         (run) => `<li>
                           <span class="mono">${esc(run.run_no)}</span>
+                          <span class="badge info mono">v${esc(run.subscription_version_no || 1)}</span>
                           <span class="badge ${run.status === 'success' ? 'ok' : 'warn'}">${esc(run.status_label)}</span>
                           <span class="mono muted">事件 ${esc(run.events_in)} · 迟到 ${esc(run.late_count)} · 拒绝 ${esc(run.rejected_count)}</span>
                           <span class="mono muted">${esc(fmtTime(run.started_at))}</span>

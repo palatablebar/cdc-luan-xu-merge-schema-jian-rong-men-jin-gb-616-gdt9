@@ -10,6 +10,7 @@ from src.routes.overview import router as overview_router
 from src.routes.rejects import router as rejects_router
 from src.routes.runs import router as runs_router
 from src.routes.schema_changes import router as schema_changes_router
+from src.routes.subscription_versions import router as subscription_versions_router
 from src.routes.tables import router as tables_router
 
 api_router = APIRouter()
@@ -17,6 +18,7 @@ api_router.include_router(health_router)
 api_router.include_router(auth_router)
 api_router.include_router(overview_router)
 api_router.include_router(tables_router)
+api_router.include_router(subscription_versions_router)
 api_router.include_router(events_router)
 api_router.include_router(runs_router)
 api_router.include_router(rejects_router)

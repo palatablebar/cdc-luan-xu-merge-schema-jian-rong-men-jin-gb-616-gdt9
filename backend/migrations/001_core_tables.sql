@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS merge_runs (
   trigger VARCHAR(20) NOT NULL DEFAULT 'manual',
   status VARCHAR(20) NOT NULL DEFAULT 'queued',
   operator_email VARCHAR(160) NOT NULL,
+  subscription_version_no INT,
+  subscription_fingerprint VARCHAR(80),
   allowed_lateness_seconds INT NOT NULL DEFAULT 30,
   events_in INT NOT NULL DEFAULT 0,
   upsert_rows INT NOT NULL DEFAULT 0,
@@ -68,8 +70,34 @@ CREATE TABLE IF NOT EXISTS merge_runs (
   metrics JSON NOT NULL,
   log_text TEXT,
   seed_key VARCHAR(120) UNIQUE,
+  KEY ix_merge_runs_sub_version (subscription_version_no),
   started_at DATETIME NOT NULL,
   finished_at DATETIME
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 订阅版本治理：待生效(draft) -> 当前基线(active) -> 已被取代(superseded)
+CREATE TABLE IF NOT EXISTS subscription_versions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  version_no INT NOT NULL UNIQUE,
+  status VARCHAR(16) NOT NULL DEFAULT 'draft',
+  base_version_no INT,
+  subscription_snapshot JSON NOT NULL,
+  changes JSON NOT NULL,
+  compat VARCHAR(16) NOT NULL DEFAULT 'forward',
+  severity VARCHAR(12) NOT NULL DEFAULT 'low',
+  action VARCHAR(12) NOT NULL DEFAULT 'apply',
+  review_status VARCHAR(16) NOT NULL DEFAULT 'pending_review',
+  review_note TEXT,
+  reviewer VARCHAR(160),
+  review_fingerprint VARCHAR(80),
+  change_log JSON NOT NULL,
+  activated_at DATETIME,
+  activation_error TEXT,
+  created_by VARCHAR(160) NOT NULL,
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  KEY ix_sub_versions_status (status),
+  KEY ix_sub_versions_base (base_version_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS reject_rows (

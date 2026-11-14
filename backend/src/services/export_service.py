@@ -30,7 +30,7 @@ def merge_runs_csv(db: Session) -> bytes:
     runs = db.scalars(select(MergeRun).order_by(MergeRun.id)).all()
     tables = {table.id: table for table in db.scalars(select(SourceTable)).all()}
     headers = [
-        "运行号", "范围", "触发", "状态", "允许迟到(s)", "事件数", "upsert行",
+        "运行号", "订阅版本", "范围", "触发", "状态", "允许迟到(s)", "事件数", "upsert行",
         "删除终态", "迟到数", "迟到率", "重复去重", "拒绝行", "水位线", "操作人", "开始时间", "结束时间",
     ]
     rows = []
@@ -40,6 +40,7 @@ def merge_runs_csv(db: Session) -> bytes:
         rows.append(
             [
                 run.run_no,
+                f"v{run.subscription_version_no}" if run.subscription_version_no else "v1",
                 "全库" if run.table_id is None else (table.name if table else f"table#{run.table_id}"),
                 TRIGGER_LABELS.get(run.trigger, run.trigger),
                 RUN_STATUS_LABELS.get(run.status, run.status),

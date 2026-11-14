@@ -35,3 +35,6 @@ venv/
 target/
 *.o
 *.obj
+
+# 本地无依赖联调脚手架（内存 ORM/stub），正式单测见 backend/tests
+.local-test/

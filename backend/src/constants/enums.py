@@ -196,3 +196,36 @@ REPLAY_STATUS_LABELS: dict[str, str] = {
     ReplayStatus.REPLAYED.value: "已重放",
     ReplayStatus.SKIPPED.value: "已跳过",
 }
+
+
+class VersionStatus(StrEnum):
+    """订阅版本生命周期：待生效 -> 当前基线 -> 被取代（切换失败回滚后仍是待生效）。"""
+
+    DRAFT = "draft"
+    ACTIVE = "active"
+    SUPERSEDED = "superseded"
+
+
+VERSION_STATUS_LABELS: dict[str, str] = {
+    VersionStatus.DRAFT.value: "待生效",
+    VersionStatus.ACTIVE.value: "当前基线",
+    VersionStatus.SUPERSEDED.value: "已被取代",
+}
+
+
+VERSION_STATUS_ORDER: list[str] = [VersionStatus.DRAFT.value, VersionStatus.ACTIVE.value, VersionStatus.SUPERSEDED.value]
+
+
+class ReviewStatus(StrEnum):
+    """待生效版本的复核状态：影响不明停在待复核，全量向前兼容才自动放行。"""
+
+    PENDING_REVIEW = "pending_review"
+    APPROVED = "approved"
+    BLOCKED = "blocked"
+
+
+REVIEW_STATUS_LABELS: dict[str, str] = {
+    ReviewStatus.PENDING_REVIEW.value: "待复核",
+    ReviewStatus.APPROVED.value: "复核通过",
+    ReviewStatus.BLOCKED.value: "已拦截",
+}

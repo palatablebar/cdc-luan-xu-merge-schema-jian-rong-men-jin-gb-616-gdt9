@@ -21,6 +21,10 @@ class MergeRun(Base):
     trigger: Mapped[str] = mapped_column(String(20), default="manual")
     status: Mapped[str] = mapped_column(String(20), default="queued", index=True)
     operator_email: Mapped[str] = mapped_column(String(160), default="system")
+    # 批次启动时钉住的订阅版本：运行期间即便有 draft 或切换，本批仍按启动版本的范围/schema 折叠
+    subscription_version_no: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    # 启动版本快照的轻量指纹，用于页面核对「批次实际使用的版本」
+    subscription_fingerprint: Mapped[str | None] = mapped_column(String(80), nullable=True)
     allowed_lateness_seconds: Mapped[int] = mapped_column(Integer, default=30)
     events_in: Mapped[int] = mapped_column(Integer, default=0)
     upsert_rows: Mapped[int] = mapped_column(Integer, default=0)

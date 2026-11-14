@@ -94,6 +94,9 @@ def ingest(db: Session, payload: dict) -> CdcEvent:
     table = db.get(SourceTable, payload["table_id"])
     if table is None:
         raise not_found("source_table", payload["table_id"])
+    if not table.enabled:
+        # 采集边界：暂停订阅的表不再收新事件；在途批次仍按启动版本处理已采集事件
+        raise AppError("CONFLICT", 409, {"reason": "subscription_paused", "table_id": table.id, "code": table.code})
     duplicate = db.scalar(
         select(CdcEvent).where(
             CdcEvent.table_id == table.id,

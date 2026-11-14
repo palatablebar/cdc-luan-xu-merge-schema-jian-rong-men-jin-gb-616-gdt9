@@ -37,8 +37,8 @@
 
 | # | 业务模块 | 对应页面 | 后端 services / controller | 主要 API |
 |---|---|---|---|---|
-| ① | 源表与订阅 | `#/tables` 源表与订阅 | `table_service` / `table_controller` | `GET/POST /api/tables`、`GET/PATCH /api/tables/{id}` |
-| ② | 事件接入与乱序注入 | `#/events` 事件流 | `event_service` / `event_controller` | `GET /api/events`、`POST /api/events` |
+| ① | 源表与订阅（版本化治理） | `#/tables` 源表与订阅 + 订阅版本治理条 | `subscription_governance`(纯治理核心)+`subscription_version_service`+`table_service` / `table_controller`、`subscription_version_controller` | `GET/POST /api/tables`、`PATCH /api/tables/{id}`（进待生效版本）、`GET /api/subscription-versions/overview`、`GET /api/subscription-versions`、`PATCH .../{id}/review`、`POST .../{id}/reevaluate`、`POST .../{id}/activate` |
+| ② | 事件接入与乱序注入 | `#/events` 事件流 | `event_service` / `event_controller` | `GET /api/events`、`POST /api/events`（暂停采集的表返回 409） |
 | ③ | 水位线乱序合并 | `#/runs` 合并批次 | `watermark_merge`(算法 A)+`merge_run_service` / `run_controller` | `GET/POST /api/runs`、`GET /api/runs/{id}/detail` |
 | ④ | 拒绝行判定与重放 | `#/runs` 抽屉内拒绝行 | `reject_service` / `reject_controller` | `GET /api/rejects`、`PATCH /api/rejects/{id}/replay` |
 | ⑤ | Schema 兼容门禁 | `#/schema` Schema 门禁 | `schema_gate`(算法 B)+`schema_service` / `schema_controller` | `GET /api/schema-changes`、`PATCH .../{id}/gate`、`POST .../{id}/reevaluate` |
@@ -129,6 +129,29 @@ docker compose exec -T backend python -m pytest tests -q
 两个算法都是纯 Python 纯函数、无网络、无随机；同样输入两次输出逐字一致。结果落库后出现在页面（总览/批次抽屉/Schema 抽屉）
 与三类 CSV 导出中，前端不含任何算法结果常量。
 
+### 治理 C｜订阅变更的可恢复版本化（`backend/src/services/subscription_governance.py`）
+
+- **问题背景**：旧实现里 PATCH 直接改 `source_tables`，导致旧批次按新范围继续、暂停的表混进全库合并、
+  历史审批被新事件沿用，新事件与门禁结论各按一套规则。
+- **版本生命周期**：`draft`（待生效）→ `active`（当前基线）→ `superseded`（已被取代）。同一时刻至多一条 active、一条 draft。
+- **变更不直接生效**：`PATCH /api/tables/{id}` 不再改 `source_tables`，而是把结构 / 水位参数 / 启停调整
+  写入（或合并进）待生效版本；源表实时值保持当前基线，运行中的批次不受影响。
+- **运行批次钉住启动版本**：`merge_runs.subscription_version_no` 记录批次启动时的基线版本，
+  `execute()` 全程使用钉住快照的表范围、`schema_columns` 与水位参数；全库合并只读取快照中 `enabled=true` 的表，
+  暂停的表不进入合并（指标 `skipped_disabled_tables` 留痕）。
+- **连续变更合并检查**：始终以当前 active 基线为起点回放 draft 变更再叠加本次 patch，逐表用算法 B 重算门禁，
+  多表取最严格一档；撤销到与基线一致的表会从变更集剔除。
+- **审批基于当前基线重算**：复核/重算都以当前 active 为基准，历史审批不沿用；只有全量 `forward` 才自动放行，
+  `breaking` / `needs_mapping` 一律停在 `pending_review`，强行放行返回 409；基线漂移（`base_version_no ≠ 当前 active`）阻断启用。
+- **重试审批不新增版本或审计**：复核指纹 `sha256(基线版本号 + 快照)`，输入与结论未变时 `audit_worthy=false`，
+  controller 不写领域审计；重算接口输入未变同样不新增审计。
+- **一次全量切换**：`POST .../activate` 在单事务内回写全部源表（采集范围）、翻转版本状态、写切换审计，
+  采集 / 全库合并范围 / 门禁审计共同生效；任一步失败整体回滚，上一版 active 与已确认结果保留，draft 仍可重试。
+- **页面核对**：`#/tables` 顶部治理条展示当前基线版本、待生效版本（含基线漂移标记）与逐表影响；
+  批次抽屉与批次列表展示「批次实际使用的订阅版本」；版本历史抽屉可核对每版快照与变更留痕。
+- **纯函数可测**：与算法 A/B 同级，`tests/test_subscription_governance.py` 覆盖快照不可变、合并、撤销剔除、
+  指纹稳定、待复核阻断、启用可行性等口径。
+
 ## 9. Seed 口径（幂等）
 
 `backend/scripts/seed_demo.py` 的自然键：`users.email`、`source_tables.code`、`cdc_events(table_id, pk_value, lsn, seq)`、
@@ -156,16 +179,18 @@ SEED_SUMMARY brand=cdcmerge users=3 sources=3 runs=2 findings=6 pending=2
 | 门禁状态 `pending/approved/blocked` | `backend/src/constants/enums.py::GateStatus` | `config.js::ENUMS.gateStatus` |
 | 拒绝原因 `duplicate/stale_after_delete/type_mismatch…` | `backend/src/constants/enums.py::RejectReason` | `config.js::ENUMS.rejectReason` |
 | 重放状态 `pending/replayed/skipped` | `backend/src/constants/enums.py::ReplayStatus` | `config.js::ENUMS.replay` |
+| 订阅版本状态 `draft/active/superseded` | `backend/src/constants/enums.py::VersionStatus` | `config.js::ENUMS.versionStatus` |
+| 版本复核状态 `pending_review/approved/blocked` | `backend/src/constants/enums.py::ReviewStatus` | `config.js::ENUMS.reviewStatus` |
 
 ## 11. 目录
 
 ```text
 backend/
   src/{config,constants,controllers,middlewares,models,routes,schemas,services,utils}
-  src/services/{watermark_merge,schema_gate}.py     # 两个真算算法
+  src/services/{watermark_merge,schema_gate,subscription_governance}.py  # 两个真算算法 + 订阅版本治理核心
   scripts/{seed_demo.py,demo_config.py,worker_healthcheck.sh}
   migrations/001_core_tables.sql                    # 人类可读 DDL（运行时不执行）
-  tests/{test_watermark_merge,test_schema_gate,test_security}.py
+  tests/{test_watermark_merge,test_schema_gate,test_subscription_governance,test_security}.py
 frontend/site/{index.html,css/{tokens,app}.css,js/{config,api,store,ui,app}.js,js/pages/*.js}
 docker-compose.yml  .env  .env.example
 ```

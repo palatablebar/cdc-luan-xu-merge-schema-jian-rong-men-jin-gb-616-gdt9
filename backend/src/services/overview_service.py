@@ -106,6 +106,10 @@ def overview(db: Session) -> dict:
     recent_runs = db.scalars(select(MergeRun).order_by(MergeRun.id.desc()).limit(4)).all()
     recent_audit = db.scalars(select(AuditLog).order_by(AuditLog.id.desc()).limit(8)).all()
 
+    from src.services import subscription_version_service
+
+    governance = subscription_version_service.governance_overview(db)
+
     return {
         "tables_total": tables_total,
         "tables_enabled": tables_enabled,
@@ -120,6 +124,7 @@ def overview(db: Session) -> dict:
         "gate_pending": gate_pending,
         "gate_breaking": gate_breaking,
         "worker_alive": worker_alive(),
+        "subscription_governance": governance,
         "latest_run": {
             "id": latest_run.id,
             "run_no": latest_run.run_no,
@@ -149,6 +154,7 @@ def overview(db: Session) -> dict:
                 "events_in": run.events_in,
                 "late_count": run.late_count,
                 "rejected_count": run.rejected_count,
+                "subscription_version_no": run.subscription_version_no,
                 "started_at": iso_utc(run.started_at),
             }
             for run in recent_runs

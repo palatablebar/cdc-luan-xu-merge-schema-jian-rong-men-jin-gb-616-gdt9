@@ -105,11 +105,13 @@ async function openRun(view, ctx, run) {
         { label: '拒绝行', value: detail.run.rejected_count, hint: '重复 / 旧更新 / 类型穿帮', tone: 'alert' },
       ])}
       ${kv([
+        ['订阅版本', `<span class="badge info" data-testid="run-version">${esc(detail.run.subscription_version_label || 'v1（历史批次）')}</span><span class="mono muted tiny"> 批次启动时钉住，运行中变更不影响本批</span>`],
         ['水位线', `<span class="mono">${fmtTimeShort(detail.run.watermark_at)}</span>`],
         ['允许迟到', `${esc(detail.run.allowed_lateness_seconds)} 秒`],
         ['开始 / 结束', `${fmtTime(detail.run.started_at)} → ${fmtTime(detail.run.finished_at)}`],
         ['算法输出摘要', `<span class="mono">${esc(JSON.stringify(metrics.reject_reasons || {}))}</span>`],
       ])}
+      ${(metrics.skipped_disabled_tables || []).length ? `<p class="warn-text tiny">全库合并已排除启动版本中暂停的表：${esc(metrics.skipped_disabled_tables.join('、'))}</p>` : ''}
       <h3 class="drawer-h3">按表拆分（算法 A 逐表折叠）</h3>
       ${perTableRows(metrics)}
       <h3 class="drawer-h3">折叠终态样例（按 event_time + lsn 排序后谁赢）</h3>
@@ -250,6 +252,7 @@ export const runsPage = {
           columns: [
             { key: 'run_no', label: '批次号', className: 'mono' },
             { key: 'scope', label: '范围' },
+            { key: 'subscription_version_no', label: '订阅版本', className: 'mono', render: (row) => esc(row.subscription_version_label || 'v1') },
             { key: 'status', label: '状态', render: (row) => `<span class="badge ${row.status === 'success' ? 'ok' : 'warn'}">${esc(ENUMS.runStatus[row.status] || row.status)}</span>` },
             { key: 'events_in', label: '事件', className: 'num' },
             { key: 'upsert_rows', label: 'upsert', className: 'num' },

@@ -38,15 +38,16 @@ export const ROLE_DUTIES = {
 
 export const PERMISSIONS = {
   admin: [
-    'overview:read', 'table:read', 'table:write', 'event:read', 'event:ingest',
+    'overview:read', 'table:read', 'table:write', 'subscription:read', 'subscription:write',
+    'event:read', 'event:ingest',
     'run:read', 'run:create', 'reject:read', 'reject:replay',
     'schema:read', 'schema:gate', 'export:read', 'audit:read',
   ],
   analyst: [
-    'overview:read', 'table:read', 'event:read', 'run:read',
+    'overview:read', 'table:read', 'subscription:read', 'event:read', 'run:read',
     'reject:read', 'reject:replay', 'schema:read', 'export:read',
   ],
-  viewer: ['overview:read', 'table:read', 'event:read', 'run:read', 'reject:read', 'schema:read'],
+  viewer: ['overview:read', 'table:read', 'subscription:read', 'event:read', 'run:read', 'reject:read', 'schema:read'],
 };
 
 export const ENUMS = {
@@ -79,6 +80,9 @@ export const ENUMS = {
   },
   trigger: { manual: '手动', schedule: '定时', seed: '初始化' },
   severity: { high: '高', medium: '中', low: '低' },
+  // 订阅版本治理
+  versionStatus: { draft: '待生效', active: '当前基线', superseded: '已被取代' },
+  reviewStatus: { pending_review: '待复核', approved: '复核通过', blocked: '已拦截' },
 };
 
 export function can(role, permission) {
@@ -105,4 +109,12 @@ export function replayTone(status) {
 
 export function severityLabel(severity) {
   return ENUMS.severity[severity] || severity;
+}
+
+export function versionTone(status) {
+  return { active: 'ok', draft: 'warn', superseded: 'info' }[status] || 'info';
+}
+
+export function reviewTone(status) {
+  return { approved: 'ok', pending_review: 'warn', blocked: 'danger' }[status] || 'info';
 }

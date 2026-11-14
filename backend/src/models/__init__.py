@@ -9,9 +9,20 @@ class Base(DeclarativeBase):
 from src.models.user import User  # noqa: E402
 from src.models.audit import AuditLog  # noqa: E402
 from src.models.source_table import SourceTable  # noqa: E402
+from src.models.subscription_version import SubscriptionVersion  # noqa: E402
 from src.models.cdc_event import CdcEvent  # noqa: E402
 from src.models.merge_run import MergeRun  # noqa: E402
 from src.models.reject_row import RejectRow  # noqa: E402
 from src.models.schema_change import SchemaChange  # noqa: E402
 
-__all__ = ["Base", "User", "AuditLog", "SourceTable", "CdcEvent", "MergeRun", "RejectRow", "SchemaChange"]
+__all__ = [
+    "Base",
+    "User",
+    "AuditLog",
+    "SourceTable",
+    "SubscriptionVersion",
+    "CdcEvent",
+    "MergeRun",
+    "RejectRow",
+    "SchemaChange",
+]

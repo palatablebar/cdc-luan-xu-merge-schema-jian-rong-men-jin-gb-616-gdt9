@@ -89,8 +89,13 @@ function openInject(view, ctx, tables) {
       close();
       await eventsPage.render(view, ctx);
     } catch (err) {
-      root.querySelector('#inject-error').textContent =
-        err.code === 'CONFLICT' ? '该 (主键, LSN) 已存在（409）' : errorMessage(err);
+      let message = errorMessage(err);
+      if (err.code === 'CONFLICT' && err.detail?.reason === 'subscription_paused') {
+        message = `源表 ${err.detail.code || ''} 已暂停采集（待生效版本未启用），不能注入事件（409）`;
+      } else if (err.code === 'CONFLICT') {
+        message = '该 (主键, LSN) 已存在（409）';
+      }
+      root.querySelector('#inject-error').textContent = message;
     }
   });
 }

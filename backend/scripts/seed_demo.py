@@ -3,6 +3,7 @@
 自然键 upsert（存在即跳过，不覆盖用户改过的复核/门禁状态）：
   users.email / source_tables.code / cdc_events(table_id, pk_value, lsn, seq)
   merge_runs.seed_key / schema_changes.change_key / audit_logs.seed_key
+  subscription_versions.version_no
 
 SEED_SUMMARY 口径：
   users=账号数 sources=源表数 runs=合并批次数 findings=Schema 变更数 pending=待门禁复核数
@@ -13,14 +14,16 @@ from __future__ import annotations
 from sqlalchemy import func, select
 
 from src.config.database import session_scope
+from src.constants.enums import ReviewStatus, VersionStatus
 from src.models.audit import AuditLog
 from src.models.cdc_event import CdcEvent
 from src.models.merge_run import MergeRun
 from src.models.reject_row import RejectRow
 from src.models.schema_change import SchemaChange
 from src.models.source_table import SourceTable
+from src.models.subscription_version import SubscriptionVersion
 from src.models.user import User
-from src.services import merge_run_service, schema_gate
+from src.services import merge_run_service, schema_gate, subscription_version_service
 from src.utils.security import hash_password
 
 from scripts.demo_config import (
@@ -157,6 +160,33 @@ def ensure_schema_changes(db) -> int:
     return db.scalar(select(func.count()).select_from(SchemaChange)) or 0
 
 
+def ensure_subscription_versions(db) -> int:
+    """v1 当前基线（合并批次钉住它）+ 一条待生效 v2（暂停 T_PREMIUM 采集，可演示全量切换）。"""
+    existing = db.scalar(select(func.count()).select_from(SubscriptionVersion)) or 0
+    if existing:
+        return existing
+    baseline = subscription_version_service.ensure_baseline(db, actor="seed@cdcmerge.io")
+    premium = db.scalar(select(SourceTable).where(SourceTable.code == "T_PREMIUM"))
+    if premium is not None:
+        # 纯启停 + 水位参数调整：判 forward，自动复核通过，可直接「启用版本」演示全量切换
+        subscription_version_service.submit_table_change(
+            db,
+            premium,
+            {"enabled": False, "allowed_lateness_seconds": 45},
+            actor="seed@cdcmerge.io",
+            reason="seed 待生效版本：暂停保费流水采集并放宽水位，等待全量切换",
+        )
+        draft = subscription_version_service.get_draft(db)
+        if draft is not None:
+            draft.review_note = "seed 预置：向前兼容变更，复核通过待启用"
+            draft.reviewer = "admin@cdcmerge.io"
+            draft.review_status = ReviewStatus.APPROVED.value
+    db.flush()
+    # 确保基线仍是 active（submit 只新增 draft，不改 active）
+    assert baseline.status == VersionStatus.ACTIVE.value
+    return db.scalar(select(func.count()).select_from(SubscriptionVersion)) or 0
+
+
 def ensure_runs(db) -> int:
     tables = {table.code: table for table in db.scalars(select(SourceTable)).all()}
     for seed_key, code, trigger, operator in SEED_RUNS:
@@ -197,6 +227,7 @@ def seed_all() -> dict:
         tables = ensure_tables(db)
         ensure_events(db)
         ensure_schema_changes(db)
+        ensure_subscription_versions(db)
         runs = ensure_runs(db)
         ensure_audit(db)
         findings = db.scalar(select(func.count()).select_from(SchemaChange)) or 0

@@ -21,6 +21,7 @@ ROLE_DUTIES: dict[str, str] = {
 PERMISSIONS: dict[str, set[str]] = {
     Role.ADMIN.value: {
         "table:read", "table:write",
+        "subscription:read", "subscription:write",
         "event:read", "event:ingest",
         "run:read", "run:create",
         "reject:read", "reject:replay",
@@ -28,18 +29,21 @@ PERMISSIONS: dict[str, set[str]] = {
         "export:read", "audit:read", "overview:read",
     },
     Role.ANALYST.value: {
-        "table:read", "event:read",
+        "table:read", "subscription:read",
+        "event:read",
         "run:read",
         "reject:read", "reject:replay",
         "schema:read",
         "export:read", "overview:read",
     },
     Role.VIEWER.value: {
-        "table:read", "event:read", "run:read", "reject:read", "schema:read", "overview:read",
+        "table:read", "subscription:read",
+        "event:read", "run:read", "reject:read", "schema:read", "overview:read",
     },
 }
 
 TABLE_WRITE_ROLES = (Role.ADMIN.value,)
+SUBSCRIPTION_WRITE_ROLES = (Role.ADMIN.value,)
 EVENT_INGEST_ROLES = (Role.ADMIN.value,)
 RUN_CREATE_ROLES = (Role.ADMIN.value,)
 REPLAY_ROLES = (Role.ADMIN.value, Role.ANALYST.value)

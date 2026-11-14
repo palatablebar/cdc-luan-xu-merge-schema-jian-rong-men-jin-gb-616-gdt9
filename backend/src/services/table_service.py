@@ -10,7 +10,7 @@ from src.utils.errors import AppError, not_found
 from src.utils.timeutil import iso_utc
 
 
-def serialize(table: SourceTable, stats: dict | None = None) -> dict:
+def serialize(table: SourceTable, stats: dict | None = None, *, version_no: int | None = None) -> dict:
     stats = stats or {}
     return {
         "id": table.id,
@@ -27,6 +27,8 @@ def serialize(table: SourceTable, stats: dict | None = None) -> dict:
         "owner": table.owner,
         "note": table.note,
         "enabled": table.enabled,
+        "active_version_no": version_no,
+        "active_version_label": f"v{version_no}" if version_no else None,
         "event_count": stats.get("event_count", 0),
         "late_count": stats.get("late_count", 0),
         "reject_count": stats.get("reject_count", 0),
@@ -69,8 +71,12 @@ def list_tables(
     total = db.scalar(count_stmt) or 0
     rows = db.scalars(stmt.order_by(SourceTable.id).limit(limit).offset(offset)).all()
     stats = _stats(db)
+    from src.services import subscription_version_service
+
+    active = subscription_version_service.get_active(db)
+    version_no = active.version_no if active else None
     return {
-        "items": [serialize(row, stats.get(row.id)) for row in rows],
+        "items": [serialize(row, stats.get(row.id), version_no=version_no) for row in rows],
         "total": total,
         "limit": limit,
         "offset": offset,
@@ -108,6 +114,10 @@ def create_table(db: Session, payload: dict) -> SourceTable:
 
 
 def update_table(db: Session, table: SourceTable, payload: dict) -> SourceTable:
+    """仅供全量切换（subscription_version_service.activate_draft）内部按快照回写。
+
+    常规 PATCH 不再直接改 source_tables，而是走待生效版本治理。
+    """
     for field in (
         "name",
         "allowed_lateness_seconds",
